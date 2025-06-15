@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Dashboard de Casos</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns"></script>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        margin: 20px;
+        background-color: #f5f7fa;
+      }
+
+      .filtros {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 15px;
+        margin-bottom: 20px;
+        padding: 15px;
+        background: white;
+        border-radius: 8px;
+        box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+      }
+
+      .filtros label {
+        font-weight: bold;
+        color: #40516c;
+      }
+
+      .container {
+        display: flex;
+        gap: 20px;
+        justify-content: center;
+        flex-wrap: wrap;
+        margin-bottom: 20px;
+        max-width: 1200px;
+        margin-left: auto;
+        margin-right: auto;
+      }
+
+      .grafico-box {
+        flex: 1 1 300px;
+        max-width: 35vw;
+        background: white;
+        padding: 15px;
+        border-radius: 8px;
+        box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+        margin-bottom: 20px;
+      }
+
+      .grafico-box.fatores {
+        flex: 1 1 100%;
+        max-width: calc(
+          70vw + 20px
+        );
+      }
+
+      h1, h2 {
+        text-align: center;
+        color: #40516c;
+      }
+
+      h1 {
+        margin-bottom: 30px;
+      }
+
+      h2 {
+        margin-top: 0;
+        margin-bottom: 15px;
+      }
+
+      select,
+      input[type="date"] {
+        padding: 8px 12px;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        background-color: #f9f9f9;
+      }
+
+      .section-title {
+        text-align: center;
+        color: #40516c;
+        margin: 40px 0 20px;
+        font-size: 24px;
+        border-bottom: 2px solid #e0e0e0;
+        padding-bottom: 10px;
+      }
+
+      .cluster-info, .regression-info {
+        margin-top: 20px;
+        padding: 15px;
+        background-color: white;
+        border-radius: 8px;
+        box-shadow: 0 0 5px rgba(0, 0, 0, 0.05);
+      }
+
+      .cluster-info h3, .regression-info h3 {
+        margin-top: 0;
+        color: #40516c;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Dashboard de Análise Criminal</h1>
+
+    <div class="filtros">
+      <label for="dataInicio">Período de: </label>
+      <input type="date" id="dataInicio" />
+      <label for="dataFim">até: </label>
+      <input type="date" id="dataFim" />
+    </div>
+
+    <h2 class="section-title">Visão Geral dos Casos</h2>
+
+    <div class="container">
+      <div class="grafico-box">
+        <h2>Status dos Casos</h2>
+        <div class="rosca-controls">
+          <label for="variavelRosca">Variável:</label>
+          <select id="variavelRosca">
+            <option value="status">Status do Caso</option>
+            <option value="tipo_do_caso">Tipo do Caso</option>
+          </select>
+        </div>
+        <div id="graficoRosca"></div>
+      </div>
+      
+      <div class="grafico-box">
+        <h2>Distribuição Temporal</h2>
+        <div id="graficoTemporal"></div>
+      </div>
+    </div>
+
+    <div class="container">
+      <div class="grafico-box">
+        <h2>Tipos de Casos</h2>
+        <div id="graficoTipos"></div>
+      </div>
+      
+      <div class="grafico-box">
+        <h2>Características das Vítimas</h2>
+        <div id="graficoVitimas"></div>
+      </div>
+    </div>
+
+    <h2 class="section-title">Análise de Machine Learning</h2>
+
+    <div class="container">
+      <div class="grafico-box fatores">
+        <div id="graficoModelo"></div>
+      </div>
+    </div>
+
+    <div class="container">
+      <div class="grafico-box fatores">
+        <h2>Clusterização dos Casos</h2>
+        <div id="graficoClustering"></div>
+      </div>
+    </div>
+
+    <div class="container">
+      <div class="grafico-box fatores">
+        <h2>Modelo de Regressão</h2>
+        <div id="graficoRegressao"></div>
+      </div>
+    </div>
+
+    <script src="script.js"></script>
+  </body>
+</html>
+<!-- Remover estas linhas duplicadas no final do arquivo -->
+<div id="graficoTemporal" class="grafico"></div>
+<div id="graficoTipos" class="grafico"></div>
