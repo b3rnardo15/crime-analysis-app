@@ -1,8 +1,10 @@
-flask
+Flask
 flask-cors
 pymongo
 pandas
 numpy
 xgboost
-scikit-learn
+scikit-learn==1.6.1
 gunicorn
+
+
