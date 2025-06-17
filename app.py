@@ -1,4 +1,4 @@
-# backend/app.py (versão final, corrigida e robusta)
+# backend/app.py (versão final corrigida e robusta)
 from flask import Flask, jsonify, request, abort
 from flask_cors import CORS
 from pymongo import MongoClient
@@ -10,41 +10,68 @@ import numpy as np
 from sklearn.cluster import KMeans
 from sklearn.preprocessing import StandardScaler
 from sklearn.linear_model import LinearRegression
+import os
 
 app = Flask(__name__)
 # Configuração do CORS para permitir requisições de qualquer origem durante o desenvolvimento
 CORS(app)
 
+# --- Variáveis de Ambiente ---
+MONGO_URI = os.getenv('MONGO_URI', "mongodb+srv://gabriel:G8PESKXdYL2zWwrE@cluster0.cdtioo1.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0")
+MODEL_PATH = os.getenv('MODEL_PATH', 'model.pkl')
 
 # --- Carregamento do Modelo de ML ---
 try:
-    with open("model.pkl", "rb") as f:
+    with open(MODEL_PATH, "rb") as f:
         modelo_dict = pickle.load(f)
         pipeline_modelo = modelo_dict["pipeline"]
         label_encoder_modelo = modelo_dict["label_encoder"]
-        print("Arquivo model.pkl carregado com sucesso.")
+        print("✅ Modelo ML carregado com sucesso.")
 except FileNotFoundError:
-    print("AVISO: Arquivo 'model.pkl' não encontrado. Rotas de ML podem não funcionar.")
+    print(f"⚠️ AVISO: Arquivo '{MODEL_PATH}' não encontrado. Rotas de ML podem não funcionar.")
     pipeline_modelo = None
     label_encoder_modelo = None
 
-@app.route('/')
-def hello():
-    return "Bem-vindo à API de análise de casos criminais"
+# --- Conexão com o MongoDB ---
+try:
+    client = MongoClient(MONGO_URI)
+    db = client["test"]
+    colecao_casos = db["cases"]
+    colecao_vitimas = db["victims"]
+    print("✅ Conexão com MongoDB estabelecida.")
+except Exception as e:
+    print(f"⚠️ ERRO ao conectar ao MongoDB: {e}")
+    colecao_casos = None
+    colecao_vitimas = None
 
-# --- ROTA DE TESTE (NOVA) ---
+# --- Middleware para verificar JSON ---
+@app.after_request
+def after_request(response):
+    if request.path == '/':
+        return response
+    if not response.headers.get('Content-Type', '').startswith('application/json'):
+        response.headers['Content-Type'] = 'application/json'
+    return response
+
+# --- Rotas Principais ---
+@app.route('/')
+def home():
+    return jsonify({
+        "status": "online",
+        "message": "API de análise de casos criminais",
+        "routes": {
+            "test": "/api/test",
+            "casos": "/api/casos",
+            "vitimas": "/api/victims",
+            "modelo": "/api/modelo/coeficientes"
+        }
+    })
+
 @app.route('/api/test')
 def test_route():
-    return jsonify({"status": "ok", "message": "A API Python está online e as rotas estão a ser registadas!"})
+    return jsonify({"status": "ok", "message": "API Python está online!"})
 
-# --- Conexão com o MongoDB ---
-MONGO_URI = "mongodb+srv://gabriel:G8PESKXdYL2zWwrE@cluster0.cdtioo1.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0"
-client = MongoClient(MONGO_URI)
-db = client["test"]
-colecao_casos = db["cases"]
-colecao_vitimas = db["victims"]
-
-# --- Funções Auxiliares e de Conversão de Dados ---
+# --- Funções Auxiliares ---
 def serialize_doc(doc):
     if doc is None: return None
     for key, value in doc.items():
@@ -64,43 +91,107 @@ def converter_documento_caso(doc):
         "data_fechamento": doc.get("closeDate"), "criado_por": doc.get("createdBy"),
     })
 
-# --- Rotas da API para Casos e Vítimas (Básicas) ---
+# --- Rotas de Dados ---
 @app.route('/api/casos', methods=['GET'])
 def listar_casos():
+    if not colecao_casos:
+        return jsonify({"error": "Conexão com MongoDB não disponível"}), 503
+    
     try:
         casos_convertidos = [converter_documento_caso(doc) for doc in colecao_casos.find({})]
-        return jsonify(casos_convertidos), 200
+        return jsonify({
+            "count": len(casos_convertidos),
+            "data": casos_convertidos
+        }), 200
     except Exception as e:
-        return jsonify({"error": f"Erro ao listar casos: {e}"}), 500
+        return jsonify({"error": f"Erro ao listar casos: {str(e)}"}), 500
 
 @app.route('/api/victims', methods=['GET'])
 def listar_vitimas():
+    if not colecao_vitimas:
+        return jsonify({"error": "Conexão com MongoDB não disponível"}), 503
+    
     try:
-        projection = {"name": 1, "nic": 1, "gender": 1, "age": 1, "identificationType": 1, "ethnicity": 1, "cases": 1}
+        projection = {
+            "name": 1, "nic": 1, "gender": 1, 
+            "age": 1, "identificationType": 1, 
+            "ethnicity": 1, "cases": 1
+        }
         vitimas_convertidas = [serialize_doc(v) for v in colecao_vitimas.find({}, projection)]
-        return jsonify(vitimas_convertidas), 200
+        return jsonify({
+            "count": len(vitimas_convertidas),
+            "data": vitimas_convertidas
+        }), 200
     except Exception as e:
-        return jsonify({"error": f"Erro ao listar vítimas: {e}"}), 500
+        return jsonify({"error": f"Erro ao listar vítimas: {str(e)}"}), 500
 
-# --- Rotas de Estatísticas e Machine Learning ---
+# --- Rotas de Machine Learning ---
 @app.route('/api/modelo/coeficientes', methods=['GET'])
 def coeficientes_modelo():
     if not pipeline_modelo:
-        return jsonify({"error": "Arquivo model.pkl não foi carregado no servidor."}), 404
+        return jsonify({
+            "error": "Modelo de Machine Learning não foi carregado",
+            "solution": "Verifique se o arquivo model.pkl existe no servidor"
+        }), 503
+    
     try:
+        # Extrai o classificador e o pré-processador do pipeline
         classifier = pipeline_modelo.named_steps['classifier']
         preprocessor = pipeline_modelo.named_steps['preprocessor']
+        
+        # Obtém os nomes das features categóricas após pré-processamento
         cat_features = preprocessor.named_transformers_['cat'].get_feature_names_out()
+        
+        # Obtém as importâncias das features
         importances = classifier.feature_importances_
-        features_importances = {feature: float(imp) for feature, imp in zip(cat_features, importances)}
-        return jsonify(features_importances), 200
+        
+        # Formata o resultado como dicionário
+        features_importances = {
+            feature: float(imp) 
+            for feature, imp in zip(cat_features, importances)
+        }
+        
+        return jsonify({
+            "status": "success",
+            "data": features_importances,
+            "metadata": {
+                "model_type": str(type(classifier).__name__,
+                "features_count": len(features_importances)
+            }
+        }), 200
+        
     except Exception as e:
-        return jsonify({"error": f"Não foi possível extrair coeficientes: {e}"}), 500
+        return jsonify({
+            "error": "Não foi possível extrair coeficientes",
+            "details": str(e)
+        }), 500
 
-# O resto das suas rotas continua aqui...
+# --- Health Check ---
+@app.route('/api/health', methods=['GET'])
+def health_check():
+    status = {
+        "python_api": "online",
+        "mongo_connection": "online" if colecao_casos else "offline",
+        "ml_model_loaded": "online" if pipeline_modelo else "offline"
+    }
+    return jsonify(status), 200
+
+# --- Error Handlers ---
+@app.errorhandler(404)
+def not_found(error):
+    return jsonify({
+        "error": "Endpoint não encontrado",
+        "message": "Verifique a URL e tente novamente"
+    }), 404
+
+@app.errorhandler(500)
+def internal_error(error):
+    return jsonify({
+        "error": "Erro interno do servidor",
+        "message": "Nossa equipe já foi notificada"
+    }), 500
 
 if __name__ == "__main__":
-    print("Iniciando o servidor Flask na porta 5000...")
-    import os
-    port = int(os.environ.get("PORT", 10000))
-    app.run(host="0.0.0.0", port=port)
+    port = int(os.getenv('PORT', 5000))
+    print(f"🚀 Iniciando servidor Flask na porta {port}...")
+    app.run(host='0.0.0.0', port=port, debug=False)
