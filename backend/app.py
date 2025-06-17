@@ -87,7 +87,27 @@ def coeficientes_modelo():
         preprocessor = pipeline_modelo.named_steps['preprocessor']
         cat_features = preprocessor.named_transformers_['cat'].get_feature_names_out()
         importances = classifier.feature_importances_
-        features_importances = {feature: float(imp) for feature, imp in zip(cat_features, importances)}
+
+        # Função para limpar e formatar nomes de variáveis
+        def formatar_nome_variavel(feature):
+            # Remove prefixos técnicos comuns
+            for prefix in ['location_', 'bodyCondition_', 'gender_', 'ethnicity_', 'identificationType_', 'nationality_']:
+                if feature.startswith(prefix):
+                    return feature.replace(prefix, '').capitalize()
+            return feature.capitalize()
+
+        # Criar dicionário com nomes formatados
+        features_importances = {}
+        for feature, imp in zip(cat_features, importances):
+            nome_formatado = formatar_nome_variavel(feature)
+            if nome_formatado:
+                features_importances[nome_formatado] = float(imp)
+
+        # Ordenar por importância
+        features_importances = dict(sorted(features_importances.items(), 
+                                         key=lambda x: abs(x[1]), 
+                                         reverse=True))
+
         return jsonify(features_importances), 200
     except Exception as e:
         return jsonify({"error": f"Não foi possível extrair coeficientes: {e}"}), 500
