@@ -155,7 +155,7 @@ def coeficientes_modelo():
             "status": "success",
             "data": features_importances,
             "metadata": {
-                "model_type": str(type(classifier).__name__,
+                "model_type": str(type(classifier).__name__),
                 "features_count": len(features_importances)
             }
         }), 200
